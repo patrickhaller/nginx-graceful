@@ -42,7 +42,7 @@ ps h -C nginx >/dev/null || die "nginx not running?"
 
 OLD=$( ls_kids 1)
 kids=$( ls_kids $OLD )
-log "old master = ${OLD}, kids = ${kids}"
+log "old master = ${OLD}, kids = " ${kids}
 
 kill -s 'USR2' $OLD
 [[ "$( ls_kids $OLD )" = "$kids" ]] && die "failed to spawn new master"
@@ -53,7 +53,7 @@ trap rollback INT
 
 kill -s 'WINCH' $OLD
 while [[ "$( ls_kids $OLD | wc -w )" != 1 ]]; do
-    echo "waiting for old workers to close: $(ls_kids $OLD)"
+    echo "waiting for old workers to close: $( ls_kids $OLD | grep -xv $NEW )"
     sleep 1
 done
 
