@@ -2,19 +2,21 @@
 # https://www.nginx.com/resources/wiki/start/topics/tutorials/commandline/
 die() { echo "$@"; exit 1; }
 error_handler() {
-    echo "Error in ${BASH_SOURCE[1]} at line ${BASH_LINENO[0]}, exiting..."
-    local stack=${FUNCNAME[*]}
-    stack=${stack/error_handler }
-    stack=${stack// /<-}
-    echo "  Stacktrace = ${stack}"
-    exit 1
+    printf 'Error at %s:%s, exiting...\nStacktrace:\n' "${BASH_SOURCE[0]}" "${BASH_LINENO[0]}" >&2
+    for k in "${!FUNCNAME[@]}"; do
+        [[ ${BASH_LINENO[$k]} == 0 ]] && continue
+        echo "  ${BASH_SOURCE[$k]}:${BASH_LINENO[$k]} called ${FUNCNAME[$k]} " >&2
+    done
 }
 run() { [[ "$HOST" = '' ]] && command "$@" || ssh $HOST "$@"; }
 log() { run logger -t 'nginx-graceful' "$*" ; }
 ps() { run ps "$@"; }
 kill() { run kill "$@"; }
 is_pid() { ps -p $1 &>/dev/null ; }
+nl() { for i in "$@"; do echo "$i"; done; }
+ls_new_master() { comm -23 <( nl $1 ) <( nl $2 ); }
 ls_kids() { ps h -C nginx -o pid,ppid | awk -v ppid=$1 '$2 == ppid { print $1 }'; }
+
 rollback() {
     echo -n "rolling back to pid ${OLD}... "
     is_pid $OLD &&
@@ -24,12 +26,6 @@ rollback() {
         kill -s 'QUIT' $NEW
     echo 'done'
     exit 0
-}
-nl() { for i in "$@"; do echo "$i"; done; }
-ls_new_master() {
-    local oldmaster="$1"; shift
-    local oldkids="$1"; shift
-    comm -23 <( ls_kids $oldmaster ) <( nl $oldkids )
 }
 
 
@@ -41,12 +37,18 @@ trap error_handler ERR
 ps h -C nginx >/dev/null || die "nginx not running?"
 
 OLD=$( ls_kids 1)
-kids=$( ls_kids $OLD )
-log "old master = ${OLD}, kids = " ${kids}
+is_pid $OLD ||
+    die "old master '${OLD}' is not a valid pid"
+old_kids=$( ls_kids $OLD )
+log "old master = ${OLD}, kids = " ${old_kids}
 
 kill -s 'USR2' $OLD
-[[ "$( ls_kids $OLD )" = "$kids" ]] && die "failed to spawn new master"
-NEW=$( ls_new_master "$OLD" "$kids" )
+new_kids=$( ls_kids $OLD )
+[[ "$new_kids" = "$old_kids" ]] &&
+    die "failed to spawn new master"
+NEW=$( ls_new_master "$new_kids" "$old_kids" )
+is_pid "$NEW" ||
+    die "new master '${NEW}' is not a valid pid"
 log "found new master = ${NEW}"
 
 trap rollback INT
