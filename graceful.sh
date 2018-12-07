@@ -8,7 +8,7 @@ error_handler() {
         echo "  ${BASH_SOURCE[$k]}:${BASH_LINENO[$k]} called ${FUNCNAME[$k]} " >&2
     done
 }
-run() { [[ "$HOST" = '' ]] && command "$@" || ssh $HOST "$@"; }
+run() { if [[ "$HOST" = '' ]]; then command "$@"; else ssh $HOST "$@"; fi; }
 log() { run logger -t 'nginx-graceful' "$*" ; }
 ps() { run ps "$@"; }
 kill() { run kill "$@"; }
