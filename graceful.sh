@@ -2,11 +2,12 @@
 # https://www.nginx.com/resources/wiki/start/topics/tutorials/commandline/
 die() { echo "$@"; exit 1; }
 error_handler() {
-    printf 'Error at %s:%s, exiting...\nStacktrace:\n' "${BASH_SOURCE[0]}" "${BASH_LINENO[0]}" >&2
-    for k in "${!FUNCNAME[@]}"; do
-        [[ ${BASH_LINENO[$k]} == 0 ]] && continue
-        echo "  ${BASH_SOURCE[$k]}:${BASH_LINENO[$k]} called ${FUNCNAME[$k]} " >&2
-    done
+    printf 'Error at %s:%s while handling `%s`\nStacktrace:\n' \
+        "$(basename ${BASH_SOURCE[0]})" "${BASH_LINENO[0]}" "$BASH_COMMAND" >&2
+    for k in ${!FUNCNAME[@]}; do
+        printf '  %s:%s called %s\n' \
+            "$(basename ${BASH_SOURCE[$k]})" "${BASH_LINENO[$k]}" "${FUNCNAME[$k]}"
+    done | tac >&2
 }
 run() { if [[ "$HOST" = '' ]]; then command "$@"; else ssh $HOST "$@"; fi; }
 log() { run logger -t 'nginx-graceful' "$*" ; }
@@ -36,8 +37,8 @@ trap error_handler ERR
 
 ps h -C nginx >/dev/null || die "nginx not running?"
 
-OLD=$( ls_kids 1)
-is_pid $OLD ||
+OLD=$( ls_kids 1 )
+is_pid "$OLD" ||
     die "old master '${OLD}' is not a valid pid"
 old_kids=$( ls_kids $OLD )
 log "old master = ${OLD}, kids = " ${old_kids}
@@ -46,6 +47,7 @@ kill -s 'USR2' $OLD
 new_kids=$( ls_kids $OLD )
 [[ "$new_kids" = "$old_kids" ]] &&
     die "failed to spawn new master"
+
 NEW=$( ls_new_master "$new_kids" "$old_kids" )
 is_pid "$NEW" ||
     die "new master '${NEW}' is not a valid pid"
