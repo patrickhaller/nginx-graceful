@@ -10,7 +10,7 @@ error_handler() {
     done | tac >&2
 }
 run() { if [[ "$HOST" = '' ]]; then command "$@"; else ssh $HOST "$@"; fi; }
-log() { run logger -t 'nginx-graceful' "$*" ; }
+log() { run logger -s -t 'nginx-graceful' "$*" ; }
 ps() { run ps "$@"; }
 kill() { run kill "$@"; }
 is_pid() { ps -p $1 &>/dev/null ; }
@@ -19,13 +19,8 @@ ls_new_master() { comm -23 <( nl $1 ) <( nl $2 ); }
 ls_kids() { ps h -C nginx -o pid,ppid | awk -v ppid=$1 '$2 == ppid { print $1 }'; }
 
 rollback() {
-    echo -n "rolling back to pid ${OLD}... "
-    is_pid $OLD &&
-        kill -s 'HUP' $OLD
-    echo -n "killing new master ${NEW}... "
-    is_pid $NEW &&
-        kill -s 'QUIT' $NEW
-    echo 'done'
+    is_pid $OLD && kill -s 'HUP'  $OLD
+    is_pid $NEW && kill -s 'QUIT' $NEW
     exit 0
 }
 
@@ -40,8 +35,8 @@ ps h -C nginx >/dev/null || die "nginx not running?"
 OLD=$( ls_kids 1 )
 is_pid "$OLD" ||
     die "old master '${OLD}' is not a valid pid"
+
 old_kids=$( ls_kids $OLD )
-log "old master = ${OLD}, kids = " ${old_kids}
 
 kill -s 'USR2' $OLD
 new_kids=$( ls_kids $OLD )
@@ -51,8 +46,9 @@ new_kids=$( ls_kids $OLD )
 NEW=$( ls_new_master "$new_kids" "$old_kids" )
 is_pid "$NEW" ||
     die "new master '${NEW}' is not a valid pid"
-log "found new master = ${NEW}"
 
+log "old master = ${OLD}, kids = " ${old_kids}
+log "found new master = ${NEW}"
 trap rollback INT
 
 kill -s 'WINCH' $OLD
