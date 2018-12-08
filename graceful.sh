@@ -4,10 +4,10 @@ die() { echo "$@"; exit 1; }
 error_handler() {
     printf 'Error at %s:%s while handling `%s`\nStacktrace:\n' \
         "$(basename ${BASH_SOURCE[0]})" "${BASH_LINENO[0]}" "$BASH_COMMAND" >&2
-    for k in ${!FUNCNAME[@]}; do
+    for (( k=${#FUNCNAME[@]}-1 ; k>=0 ; k--)); do
         printf '  %s:%s called %s\n' \
-            "$(basename ${BASH_SOURCE[$k]})" "${BASH_LINENO[$k]}" "${FUNCNAME[$k]}"
-    done | tac >&2
+            "$(basename ${BASH_SOURCE[$k]})" "${BASH_LINENO[$k]}" "${FUNCNAME[$k]}" >&2
+    done
 }
 run() { if [[ "$HOST" = '' ]]; then command "$@"; else ssh $HOST "$@"; fi; }
 log() { run logger -s -t 'nginx-graceful' "$*" ; }
